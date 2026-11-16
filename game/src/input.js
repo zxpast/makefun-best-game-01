@@ -1,89 +1,45 @@
-// Keyboard and mouse state. The game reads movement as a held set of keys and
-// one-shot actions (dash, confirm, pause) as presses that are consumed once,
-// so a held key never double-fires a menu choice.
-
-const MOVE_KEYS = {
-  ArrowUp: [0, -1], KeyW: [0, -1],
-  ArrowDown: [0, 1], KeyS: [0, 1],
-  ArrowLeft: [-1, 0], KeyA: [-1, 0],
-  ArrowRight: [1, 0], KeyD: [1, 0],
-};
-
+// Keyboard + mouse for WICKWARD. The main loop polls this once per frame;
+// clicks are queued so a fast click is never lost between frames.
 export class Input {
-  constructor() {
-    this.down = new Set();
-    this.pressed = new Set();
-    this.mouse = { x: 0, y: 0, clicked: false };
-    this.onFirstGesture = null;
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.clicks = []; // {x, y} in canvas pixels
+    this.keys = {};   // currently held, by e.key.toLowerCase()
+    this.pressed = []; // keys pressed since last poll, e.key.toLowerCase()
+    this.hover = { x: 0, y: 0 };
+
+    canvas.addEventListener('mousemove', (e) => {
+      const r = canvas.getBoundingClientRect();
+      const sx = canvas.width / Math.max(1, r.width);
+      const sy = canvas.height / Math.max(1, r.height);
+      this.mouseX = (e.clientX - r.left) * sx;
+      this.mouseY = (e.clientY - r.top) * sy;
+      this.hover.x = this.mouseX; this.hover.y = this.mouseY;
+    });
+    canvas.addEventListener('mousedown', (e) => {
+      const r = canvas.getBoundingClientRect();
+      const sx = canvas.width / Math.max(1, r.width);
+      const sy = canvas.height / Math.max(1, r.height);
+      this.clicks.push({ x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy });
+    });
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (!this.keys[k]) this.pressed.push(k);
+      this.keys[k] = true;
+      if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
   }
 
-  attach(element) {
-    window.addEventListener('keydown', (event) => {
-      if (event.repeat) return;
-      this.down.add(event.code);
-      this.pressed.add(event.code);
-      if (this.onFirstGesture) this.onFirstGesture();
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
-        event.preventDefault();
-      }
-    });
-    window.addEventListener('keyup', (event) => {
-      this.down.delete(event.code);
-    });
-    window.addEventListener('blur', () => {
-      this.down.clear();
-    });
-    element.addEventListener('pointermove', (event) => {
-      const rect = element.getBoundingClientRect();
-      this.mouse.x = (event.clientX - rect.left) * (element.width / rect.width);
-      this.mouse.y = (event.clientY - rect.top) * (element.height / rect.height);
-    });
-    element.addEventListener('pointerdown', (event) => {
-      const rect = element.getBoundingClientRect();
-      this.mouse.x = (event.clientX - rect.left) * (element.width / rect.width);
-      this.mouse.y = (event.clientY - rect.top) * (element.height / rect.height);
-      this.mouse.clicked = true;
-      if (this.onFirstGesture) this.onFirstGesture();
-    });
+  // Drain this frame's events; call once per frame from the main loop.
+  poll() {
+    const out = { clicks: this.clicks, pressed: this.pressed, mouseX: this.mouseX, mouseY: this.mouseY };
+    this.clicks = [];
+    this.pressed = [];
+    return out;
   }
 
-  // Normalised movement vector from the keys currently held.
-  moveVector() {
-    let x = 0;
-    let y = 0;
-    for (const code of this.down) {
-      const dir = MOVE_KEYS[code];
-      if (dir) {
-        x += dir[0];
-        y += dir[1];
-      }
-    }
-    if (x === 0 && y === 0) return { x: 0, y: 0 };
-    const length = Math.hypot(x, y);
-    return { x: x / length, y: y / length };
-  }
-
-  // True once for the frame after the key went down, then consumed.
-  wasPressed(...codes) {
-    for (const code of codes) {
-      if (this.pressed.has(code)) {
-        this.pressed.delete(code);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // True once for the frame after a click, then consumed.
-  wasClicked() {
-    if (!this.mouse.clicked) return false;
-    this.mouse.clicked = false;
-    return true;
-  }
-
-  // Call at the end of each frame so unclaimed presses do not linger.
-  endFrame() {
-    this.pressed.clear();
-    this.mouse.clicked = false;
-  }
+  held(k) { return !!this.keys[k]; }
 }

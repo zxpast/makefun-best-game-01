@@ -1,4 +1,4 @@
-// Ember Tide — the entry program (Node 22, standard library only). It hands the
+// WICKWARD — the entry program (Node 22, standard library only). It hands the
 // game in: copies game/ and screenshots/ from beside this file into the output
 // directory and writes dossier.json there with the kit's make.fun library, so
 // the judge reads the same summary the scorer rebuilds. Outside the grader,
